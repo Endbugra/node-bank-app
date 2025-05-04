@@ -1,107 +1,149 @@
 import dotenv from 'dotenv';
-dotenv.config(); // Ortam değişkenlerini yükle
+dotenv.config();
 
-import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import conn from './config/db.js';
 import User from './models/User.js';
-
-// MongoDB bağlantısını başlat
-conn();
+import express from 'express';
+import { logAction } from './middleware/logMiddleware.js';
 
 const app = express();
-
-// Middleware
-app.use(cors());
 app.use(express.json());
 
-// Port tanımlama
+// Loglama middleware'ini tüm isteklere uygula
+app.use(logAction);
+
+conn();
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true })); //form verilerini okuyabilmek için gerekli
+
 const PORT = process.env.PORT || 5001;
 
+// Ana sayfa endpointi
+app.post("/", (req, res) => {
+  res.send("Sunucu çalışıyor!");
+});
+
 // Kullanıcıları listeleme endpointi
-app.get('/users', async (req, res) => {
+app.post('/users/list', async (req, res) => {
   try {
-    const users = await User.find(); // Tüm kullanıcıları getir
+    const users = await User.find();
     res.json(users);
   } catch (err) {
-    console.error("Hata:", err.message); // Hata mesajını konsola yazdır
     res.status(500).json({ error: "Kullanıcılar alınırken bir hata oluştu" });
   }
 });
 
-
-
-
-app.get("/", (req, res) => {
-  res.send("Sunucu çalışıyor!");
-});
-
-
-
-// Test endpointi: Yeni bir kullanıcı oluşturma
-app.get('/test', async (req, res) => {
+// Kullanıcı kayıt (Sign Up) endpointi
+app.post('/signup', async (req, res) => {
   try {
-    // Şifreyi hash'le
-    const hashedPassword = await bcrypt.hash("123456", 10);
+    const { name, email, password } = req.body;
 
-    // Yeni kullanıcı oluştur
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Bu e-posta zaten kayıtlı" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
-      name: "Test User",
-      email: "tes22222t@example.com",
+      name,
+      email,
       password: hashedPassword,
+      balance: 0  // Yeni kullanıcıya başlangıç bakiyesi ekliyoruz
     });
 
-    // Şifreyi döndürmeden kullanıcıyı yanıtla
-    const { password, ...userWithoutPassword } = user.toObject();
+    const { password: _, ...userWithoutPassword } = user.toObject();
     res.json({ message: "Kullanıcı başarıyla oluşturuldu", user: userWithoutPassword });
   } catch (err) {
-    console.error("Hata:", err.message); // Hata mesajını konsola yazdır
     res.status(500).json({ error: "Kullanıcı oluşturulurken bir hata oluştu" });
   }
 });
 
-// Kullanıcı güncelleme endpointi
-app.put('/users/:id', async (req, res) => {
+// Kullanıcı giriş (Login) endpointi
+app.post('/login', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, email } = req.body;
-
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { name, email },
-      { new: true } // Güncellenmiş kullanıcıyı döndür
-    );
-
-    if (!updatedUser) {
-      return res.status(404).json({ message: "Kullanıcı bulunamadı" });
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      return res.status(400).json({ message: "Kullanıcı bulunamadı" });
     }
 
-    res.json(updatedUser);
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Şifre yanlış" });
+    }
+
+    const { password: _, ...userWithoutPassword } = user.toObject();
+    res.json({ message: "Giriş başarılı", user: userWithoutPassword });
   } catch (err) {
-    console.error("Hata:", err.message);
-    res.status(500).json({ error: "Kullanıcı güncellenirken bir hata oluştu" });
+    res.status(500).json({ error: "Giriş yapılırken bir hata oluştu" });
   }
 });
 
-// Kullanıcı silme endpointi
-app.delete('/users/:id', async (req, res) => {
+// Bakiye sorgulama endpointi
+app.get('/balance/:email', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { email } = req.params;
+    const user = await User.findOne({ email });
 
-    const deletedUser = await User.findByIdAndDelete(id);
-    if (!deletedUser) {
-      return res.status(404).json({ message: "Kullanıcı bulunamadı" });
+    if (!user) {
+      return res.status(400).json({ message: "Kullanıcı bulunamadı" });
     }
 
-    res.json({ message: "Kullanıcı başarıyla silindi" });
+    res.json({ balance: user.balance });
   } catch (err) {
-    console.error("Hata:", err.message);
-    res.status(500).json({ error: "Kullanıcı silinirken bir hata oluştu" });
+    res.status(500).json({ error: "Bakiye sorgulama sırasında bir hata oluştu" });
   }
 });
 
-// Sunucuyu başlat
+// Bakiye artırma endpointi
+app.put('/balance/increase/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { amount } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({ message: "Kullanıcı bulunamadı" });
+    }
+
+    user.balance += amount;
+    await user.save();
+    
+    res.json({ message: "Bakiye başarıyla artırıldı", balance: user.balance });
+  } catch (err) {
+    res.status(500).json({ error: "Bakiye artırılırken bir hata oluştu" });
+  }
+});
+
+// Bakiye azaltma endpointi
+app.put('/balance/decrease/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { amount } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({ message: "Kullanıcı bulunamadı" });
+    }
+
+    if (user.balance < amount) {
+      return res.status(400).json({ message: "Yetersiz bakiye" });
+    }
+
+    user.balance -= amount;
+    await user.save();
+
+    res.json({ message: "Bakiye başarıyla azaltıldı", balance: user.balance });
+  } catch (err) {
+    res.status(500).json({ error: "Bakiye azaltılırken bir hata oluştu" });
+  }
+});
+
+// API çalıştığını gösteren portu dinle
 app.listen(PORT, () => {
   console.log(`API çalışıyor: http://localhost:${PORT}`);
 });
