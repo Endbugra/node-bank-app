@@ -6,8 +6,12 @@ import conn from './config/db.js';
 import User from './models/User.js';
 import express from 'express';
 import { logAction } from './middleware/logMiddleware.js';
+<<<<<<< HEAD
 import {router} from './routes/auth.js';
 import bcrypt from 'bcryptjs';
+=======
+
+>>>>>>> 1e761cef464563502981084952dc6cdd0113439f
 const app = express();
 app.use(express.json());
 
@@ -22,11 +26,18 @@ app.use(express.urlencoded({ extended: true })); //form verilerini okuyabilmek i
 const PORT = process.env.PORT || 5001;
 
 // Ana sayfa endpointi
+<<<<<<< HEAD
 app.use("/sign",router)
 
 app.post("sign",(req,res)=>{
   register(req,res)
 })
+=======
+app.post("/", (req, res) => {
+  res.send("Sunucu çalışıyor!");
+});
+
+>>>>>>> 1e761cef464563502981084952dc6cdd0113439f
 // Kullanıcıları listeleme endpointi
 app.post('/users/list', async (req, res) => {
   try {
@@ -37,16 +48,97 @@ app.post('/users/list', async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 // Bakiye sorgulama endpointi
 app.get('/balance/:email', async (req, res) => {
   try {
     const { email } = req.params;
     const user = await User.findOne({ email });
 
+=======
+// Kullanıcı kayıt (Sign Up) endpointi
+app.post('/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Bu e-posta zaten kayıtlı" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      balance: 0  // Yeni kullanıcıya başlangıç bakiyesi ekliyoruz
+    });
+
+    const { password: _, ...userWithoutPassword } = user.toObject();
+    res.json({ message: "Kullanıcı başarıyla oluşturuldu", user: userWithoutPassword });
+  } catch (err) {
+    res.status(500).json({ error: "Kullanıcı oluşturulurken bir hata oluştu" });
+  }
+});
+
+// Kullanıcı giriş (Login) endpointi
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    
+>>>>>>> 1e761cef464563502981084952dc6cdd0113439f
     if (!user) {
       return res.status(400).json({ message: "Kullanıcı bulunamadı" });
     }
 
+<<<<<<< HEAD
+    res.json({ balance: user.balance });
+  } catch (err) {
+    res.status(500).json({ error: "Bakiye sorgulama sırasında bir hata oluştu" });
+  }
+});
+
+// Bakiye artırma endpointi
+app.put('/balance/increase/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { amount } = req.body;
+=======
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Şifre yanlış" });
+    }
+
+    const { password: _, ...userWithoutPassword } = user.toObject();
+    res.json({ message: "Giriş başarılı", user: userWithoutPassword });
+  } catch (err) {
+    res.status(500).json({ error: "Giriş yapılırken bir hata oluştu" });
+  }
+});
+
+// Bakiye sorgulama endpointi
+app.get('/balance/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+>>>>>>> 1e761cef464563502981084952dc6cdd0113439f
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({ message: "Kullanıcı bulunamadı" });
+    }
+
+<<<<<<< HEAD
+    user.balance += amount;
+    await user.save();
+    
+    res.json({ message: "Bakiye başarıyla artırıldı", balance: user.balance });
+  } catch (err) {
+    res.status(500).json({ error: "Bakiye artırılırken bir hata oluştu" });
+  }
+});
+
+=======
     res.json({ balance: user.balance });
   } catch (err) {
     res.status(500).json({ error: "Bakiye sorgulama sırasında bir hata oluştu" });
@@ -73,6 +165,7 @@ app.put('/balance/increase/:email', async (req, res) => {
   }
 });
 
+>>>>>>> 1e761cef464563502981084952dc6cdd0113439f
 // Bakiye azaltma endpointi
 app.put('/balance/decrease/:email', async (req, res) => {
   try {
